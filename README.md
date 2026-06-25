@@ -9,6 +9,14 @@ button.
 Whisper is for speech-to-text, so it cannot read text aloud. Select Reader uses
 offline text-to-speech instead, preferring Kokoro local AI voices when installed.
 
+## Features
+
+- Reads highlighted text aloud on Linux desktops.
+- Shows a small play button near the cursor for new selections.
+- Supports auto-read, manual playback, clipboard watching, and a read shortcut.
+- Uses Kokoro local AI voices when available, with offline speech fallbacks.
+- Splits long selections into chunks for faster playback.
+
 ## Requirements
 
 - Python 3 with Tkinter
@@ -44,9 +52,9 @@ when launching:
 SELECT_READER_KOKORO_VOICE=af_bella python3 select-reader.py
 ```
 
-## Shortcut
+## Keyboard Shortcuts
 
-Press `Ctrl+Alt+R` to read the current selection.
+The default shortcut is `Ctrl+Alt+R` to read the current selection.
 
 This works whenever the Select Reader window is focused. For a global shortcut
 on X11, install the optional hotkey dependency:
@@ -55,7 +63,9 @@ on X11, install the optional hotkey dependency:
 python3 -m pip install --user pynput
 ```
 
-Change the shortcut in the **Read shortcut** field inside the app. Examples:
+Change the shortcut in the **Read shortcut** field inside the app. Shortcuts use
+one key plus optional modifiers such as `Ctrl`, `Alt`, `Shift`, or `Super`.
+Examples:
 
 - `Ctrl+Alt+R`
 - `Ctrl+Shift+Space`
