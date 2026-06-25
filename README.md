@@ -1,5 +1,7 @@
 # Select Reader
 
+![Select Reader app screenshot](assets/select-reader-screenshot.png)
+
 Select Reader is a small Linux accessibility app that reads highlighted text
 aloud. Start it, select text in a browser or another app, and it speaks the
 current selection. A small play button appears near your cursor when new text is

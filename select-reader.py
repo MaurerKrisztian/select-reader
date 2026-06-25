@@ -16,7 +16,6 @@ import re
 import shutil
 import subprocess
 import tempfile
-import textwrap
 import threading
 import tkinter as tk
 from pathlib import Path
@@ -247,9 +246,28 @@ class SpeechEngine:
                 self.kokoro_pipeline = KPipeline(lang_code=self.kokoro_voice[0])
 
             generator = self.kokoro_pipeline(text, voice=self.kokoro_voice)
-            for _graphemes, _phonemes, audio in generator:
-                sf.write(wav_path, audio, 24000)
-                break
+            sound_file = None
+            wrote_audio = False
+            try:
+                for _graphemes, _phonemes, audio in generator:
+                    if self.stop_event.is_set():
+                        break
+                    if sound_file is None:
+                        channels = 1 if getattr(audio, "ndim", 1) == 1 else int(audio.shape[1])
+                        sound_file = sf.SoundFile(
+                            wav_path,
+                            mode="w",
+                            samplerate=24000,
+                            channels=channels,
+                        )
+                    sound_file.write(audio)
+                    wrote_audio = True
+            finally:
+                if sound_file is not None:
+                    sound_file.close()
+            if not wrote_audio:
+                self._unlink_quietly(wav_path)
+                return None
             return wav_path
         except (OSError, subprocess.TimeoutExpired, Exception):
             self._unlink_quietly(wav_path)
@@ -1087,7 +1105,8 @@ class SelectReaderApp:
     def _clean_text(text: str) -> str:
         text = text.replace("\x00", " ").strip()
         text = "\n".join(line.strip() for line in text.splitlines())
-        text = textwrap.shorten(text, width=MAX_CHARS, placeholder="...")
+        if len(text) > MAX_CHARS:
+            text = f"{text[:MAX_CHARS].rstrip()}..."
         return text
 
     def _quit(self) -> None:
