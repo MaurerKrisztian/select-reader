@@ -8,16 +8,20 @@ available speech backend: Kokoro, speech-dispatcher, espeak-ng, or espeak.
 
 from __future__ import annotations
 
+import argparse
 import importlib.util
 import json
 import os
 import queue
 import re
 import shutil
+import socket
 import subprocess
 import tempfile
 import threading
 import tkinter as tk
+import urllib.parse
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from tkinter import messagebox, ttk
 from typing import Callable
@@ -31,9 +35,10 @@ POLL_MS = 350
 SPEAK_AFTER_MS = 550
 MAX_CHARS = 5000
 CONFIG_PATH = Path(os.environ.get("XDG_CONFIG_HOME", "~/.config")).expanduser() / "select-reader" / "config.json"
-DEFAULT_SHORTCUT = "Ctrl+Alt+R"
-DEFAULT_FIRST_CHUNK_SENTENCES = 2
-DEFAULT_NEXT_CHUNK_SENTENCES = 4
+SOCKET_PATH = CONFIG_PATH.parent / "socket"
+DEFAULT_SHORTCUT = "Ctrl+Shift+C"
+DEFAULT_FIRST_CHUNK_SENTENCES = 1
+DEFAULT_NEXT_CHUNK_SENTENCES = 3
 
 THEME = {
     "bg": "#050608",
@@ -72,6 +77,7 @@ class SpeechEngine:
         self.process: subprocess.Popen[str] | None = None
         self.stop_event = threading.Event()
         self.lock = threading.Lock()
+        self.paused = False
 
     def _detect_backend(self) -> str | None:
         if self._has_kokoro() and self._audio_player():
@@ -123,6 +129,14 @@ class SpeechEngine:
         try:
             with self.lock:
                 self.stop_event.clear()
+
+                # Check paused state before proceeding
+                while self.paused and not self.stop_event.is_set():
+                    import time
+                    time.sleep(0.05)
+                if self.stop_event.is_set():
+                    return
+
                 if self.backend == "kokoro":
                     self._speak_with_kokoro(
                         text,
@@ -142,6 +156,12 @@ class SpeechEngine:
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL,
                     )
+                    if self.paused:
+                        import signal
+                        try:
+                            os.kill(self.process.pid, signal.SIGSTOP)
+                        except Exception:
+                            pass
                     self.process.wait()
                     return
 
@@ -150,6 +170,12 @@ class SpeechEngine:
                     stdin=subprocess.PIPE,
                     text=True,
                 )
+                if self.paused:
+                    import signal
+                    try:
+                        os.kill(self.process.pid, signal.SIGSTOP)
+                    except Exception:
+                        pass
                 if self.process.stdin:
                     try:
                         self.process.stdin.write(text)
@@ -232,7 +258,7 @@ class SpeechEngine:
             except queue.Empty:
                 break
             if leftover:
-                self._unlink_quietly(leftover)
+                self._unlink_quietly(leftover[0])
 
     def _generate_kokoro_wav(self, text: str) -> str | None:
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as wav_file:
@@ -276,11 +302,27 @@ class SpeechEngine:
     def _play_wav(self, wav_path: str, player: list[str]) -> None:
         if self.stop_event.is_set():
             return
+
+        while self.paused and not self.stop_event.is_set():
+            import time
+            time.sleep(0.05)
+
+        if self.stop_event.is_set():
+            return
+
         self.process = subprocess.Popen(
             [*player, wav_path],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
+
+        if self.paused:
+            import signal
+            try:
+                os.kill(self.process.pid, signal.SIGSTOP)
+            except Exception:
+                pass
+
         self.process.wait()
 
     @staticmethod
@@ -315,6 +357,7 @@ class SpeechEngine:
 
     def stop(self) -> None:
         self.stop_event.set()
+        self.paused = False
         if self.backend == "spd-say":
             subprocess.Popen(
                 ["spd-say", "-C"],
@@ -324,6 +367,11 @@ class SpeechEngine:
             return
 
         if self.process and self.process.poll() is None:
+            import signal
+            try:
+                os.kill(self.process.pid, signal.SIGCONT)
+            except Exception:
+                pass
             self.process.terminate()
             try:
                 self.process.wait(timeout=0.5)
@@ -331,9 +379,241 @@ class SpeechEngine:
                 self.process.kill()
         self.process = None
 
+    def pause(self) -> None:
+        if not self.paused and self.process and self.process.poll() is None:
+            import signal
+            try:
+                os.kill(self.process.pid, signal.SIGSTOP)
+                self.paused = True
+            except Exception as e:
+                print(f"Failed to pause: {e}")
+
+    def resume(self) -> None:
+        if self.paused and self.process and self.process.poll() is None:
+            import signal
+            try:
+                os.kill(self.process.pid, signal.SIGCONT)
+                self.paused = False
+            except Exception as e:
+                print(f"Failed to resume: {e}")
+
+
+def simulate_copy() -> None:
+    try:
+        from pynput.keyboard import Controller, Key
+        keyboard_controller = Controller()
+        keyboard_controller.press(Key.ctrl)
+        keyboard_controller.press('c')
+        keyboard_controller.release('c')
+        keyboard_controller.release(Key.ctrl)
+        import time
+        time.sleep(0.15)
+        return
+    except Exception:
+        pass
+
+    if shutil.which("xdotool"):
+        try:
+            subprocess.run(["xdotool", "key", "ctrl+c"], check=False)
+            import time
+            time.sleep(0.15)
+            return
+        except Exception:
+            pass
+
+
+def get_selection_cli() -> str:
+    simulate_copy()
+    candidates = []
+
+    def run_cmd(command: list[str]) -> str:
+        if not shutil.which(command[0]):
+            return ""
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=0.3,
+                check=False,
+            )
+            if result.returncode == 0 and result.stdout:
+                return result.stdout
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+        return ""
+
+    # Try Primary Selection first
+    for cmd in [
+        ["wl-paste", "--primary", "--no-newline"],
+        ["xclip", "-o", "-selection", "primary"],
+        ["xsel", "-op"],
+    ]:
+        text = run_cmd(cmd)
+        if text:
+            candidates.append(text)
+            break
+
+    # Try Clipboard next
+    for cmd in [
+        ["wl-paste", "--no-newline"],
+        ["xclip", "-o", "-selection", "clipboard"],
+        ["xsel", "-ob"],
+    ]:
+        text = run_cmd(cmd)
+        if text:
+            candidates.append(text)
+            break
+
+    for text in candidates:
+        cleaned = text.replace("\x00", " ").strip()
+        cleaned = "\n".join(line.strip() for line in cleaned.splitlines())
+        if len(cleaned) > MAX_CHARS:
+            cleaned = f"{cleaned[:MAX_CHARS].rstrip()}..."
+        if cleaned:
+            return cleaned
+    return ""
+
+
+def send_socket_command(command: str, text: str = "") -> bool:
+    try:
+        if not SOCKET_PATH.exists():
+            return False
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+            client.connect(str(SOCKET_PATH))
+            payload = json.dumps({"command": command, "text": text})
+            client.sendall(payload.encode("utf-8"))
+            return True
+    except (ConnectionRefusedError, FileNotFoundError):
+        try:
+            SOCKET_PATH.unlink()
+        except OSError:
+            pass
+        return False
+    except Exception:
+        return False
+
+
+class SocketServer(threading.Thread):
+    def __init__(self, app: SelectReaderApp) -> None:
+        super().__init__(daemon=True)
+        self.app = app
+        self.running = True
+        self.server_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+
+    def run(self) -> None:
+        try:
+            if SOCKET_PATH.exists():
+                SOCKET_PATH.unlink()
+        except OSError:
+            pass
+
+        try:
+            SOCKET_PATH.parent.mkdir(parents=True, exist_ok=True)
+            self.server_socket.bind(str(SOCKET_PATH))
+            self.server_socket.listen(5)
+            self.server_socket.settimeout(1.0)
+        except Exception as e:
+            print(f"Failed to start socket server: {e}")
+            return
+
+        while self.running:
+            try:
+                conn, _ = self.server_socket.accept()
+            except socket.timeout:
+                continue
+            except Exception:
+                break
+
+            threading.Thread(target=self.handle_client, args=(conn,), daemon=True).start()
+
+    def handle_client(self, conn: socket.socket) -> None:
+        try:
+            with conn:
+                conn.settimeout(2.0)
+                data = conn.recv(65536)
+                if not data:
+                    return
+                payload = json.loads(data.decode("utf-8"))
+                cmd = payload.get("command")
+                text = payload.get("text", "")
+                self.app.root.after(0, lambda: self.app.handle_socket_command(cmd, text))
+        except Exception as e:
+            print(f"Error handling socket client: {e}")
+
+    def stop(self) -> None:
+        self.running = False
+        try:
+            self.server_socket.close()
+        except Exception:
+            pass
+        try:
+            if SOCKET_PATH.exists():
+                SOCKET_PATH.unlink()
+        except OSError:
+            pass
+
+
+class HttpServerThread(threading.Thread):
+    def __init__(self, app: SelectReaderApp) -> None:
+        super().__init__(daemon=True)
+        self.app = app
+        self.httpd = None
+
+    def run(self) -> None:
+        app_ref = self.app
+
+        class LocalRequestHandler(BaseHTTPRequestHandler):
+            def log_message(self, format: str, *args: object) -> None:
+                pass
+
+            def do_GET(self) -> None:
+                parsed = urllib.parse.urlparse(self.path)
+                if parsed.path == "/read":
+                    query = urllib.parse.parse_qs(parsed.query)
+                    text = query.get("text", [""])[0]
+                    if text:
+                        app_ref.root.after(0, lambda: app_ref.handle_socket_command("text", text))
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/plain")
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.end_headers()
+                    self.wfile.write(b"OK")
+                elif parsed.path == "/stop":
+                    app_ref.root.after(0, lambda: app_ref.handle_socket_command("stop", ""))
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/plain")
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.end_headers()
+                    self.wfile.write(b"OK")
+                else:
+                    self.send_response(404)
+                    self.end_headers()
+
+            def do_OPTIONS(self) -> None:
+                self.send_response(200)
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+                self.send_header("Access-Control-Allow-Headers", "Content-Type")
+                self.end_headers()
+
+        try:
+            self.httpd = HTTPServer(("127.0.0.1", 4040), LocalRequestHandler)
+            self.httpd.serve_forever()
+        except Exception as e:
+            print(f"Failed to start HTTP server on port 4040: {e}")
+
+    def stop(self) -> None:
+        if self.httpd:
+            try:
+                self.httpd.shutdown()
+                self.httpd.server_close()
+            except Exception:
+                pass
+
 
 class SelectReaderApp:
-    def __init__(self, root: tk.Tk) -> None:
+    def __init__(self, root: tk.Tk, initial_text: str = "") -> None:
         self.root = root
         self.root.title(APP_NAME)
         self.root.minsize(620, 480)
@@ -372,12 +652,24 @@ class SelectReaderApp:
         self.hotkey_listener = None
         self.bound_shortcuts: list[str] = []
         self.status = tk.StringVar(value="Starting...")
-        self.preview = tk.StringVar(value="Select text in another app to hear it.")
+        self.preview = tk.StringVar(
+            value=initial_text if initial_text else "Select text in another app to hear it."
+        )
 
         self._build_ui()
         self._setup_shortcuts()
         self._set_initial_status()
         self._poll_selection()
+
+        self.socket_server = SocketServer(self)
+        self.socket_server.start()
+        self.http_server = HttpServerThread(self)
+        self.http_server.start()
+
+        if initial_text:
+            self.last_seen = initial_text
+            self.pending_text = initial_text
+            self.root.after(500, lambda: self._schedule_speech(initial_text))
 
     @staticmethod
     def _load_config() -> dict[str, object]:
@@ -669,6 +961,10 @@ class SelectReaderApp:
         buttons = ttk.Frame(controls, style="App.TFrame")
         buttons.grid(row=4, column=0, sticky="ew", pady=(12, 0))
         ttk.Button(buttons, text="Stop", command=self._stop_reading).pack(side="left")
+        self.pause_btn = ttk.Button(
+            buttons, text="Pause", command=self._toggle_pause, state="disabled"
+        )
+        self.pause_btn.pack(side="left", padx=(8, 0))
         ttk.Button(buttons, text="Read again", command=self._read_again).pack(
             side="left", padx=(8, 0)
         )
@@ -987,9 +1283,16 @@ class SelectReaderApp:
             return
 
         self.status.set("Reading selected text...")
+        self.pause_btn.configure(state="normal", text="Pause")
+        self.engine.paused = False
         options = self._speech_options()
         self.read_token += 1
         read_token = self.read_token
+
+        def done_callback() -> None:
+            self._clear_spoken_highlight(read_token)
+            self.root.after(0, self._speech_completed)
+
         threading.Thread(
             target=self.engine.speak,
             kwargs={
@@ -998,17 +1301,31 @@ class SelectReaderApp:
                 "on_progress": lambda chunk: self._highlight_spoken_text(
                     chunk, read_token
                 ),
-                "on_done": lambda: self._clear_spoken_highlight(read_token),
+                "on_done": done_callback,
             },
             daemon=True,
         ).start()
-        self.root.after(900, self._set_initial_status)
+
+    def _speech_completed(self) -> None:
+        self.pause_btn.configure(state="disabled", text="Pause")
+        self._set_initial_status()
+
+    def _toggle_pause(self) -> None:
+        if self.engine.paused:
+            self.engine.resume()
+            self.pause_btn.configure(text="Pause")
+            self.status.set("Speaking...")
+        else:
+            self.engine.pause()
+            self.pause_btn.configure(text="Resume")
+            self.status.set("Paused")
 
     def _read_again(self) -> None:
         if self.last_seen:
             self._schedule_speech(self.last_seen)
 
     def _read_from_shortcut(self, _event: tk.Event | None = None) -> None:
+        simulate_copy()
         text = self._read_desktop_text()
         if text:
             self.last_seen = text
@@ -1099,6 +1416,7 @@ class SelectReaderApp:
         self.read_token += 1
         self.engine.stop()
         self._clear_spoken_highlight()
+        self.pause_btn.configure(state="disabled", text="Pause")
         self._set_initial_status()
 
     @staticmethod
@@ -1109,17 +1427,74 @@ class SelectReaderApp:
             text = f"{text[:MAX_CHARS].rstrip()}..."
         return text
 
+    def handle_socket_command(self, cmd: str, text: str) -> None:
+        if cmd == "stop":
+            self._stop_reading()
+        elif cmd == "text":
+            self.last_seen = text
+            self.pending_text = text
+            self._show_preview(text)
+            self._hide_play_popup()
+            
+            # Focus GUI: deiconify (unminimize), lift to top, and force focus
+            self.root.deiconify()
+            self.root.lift()
+            self.root.focus_force()
+            
+            self._schedule_speech(text)
+
     def _quit(self) -> None:
         self.engine.stop()
         self._save_config()
         if self.hotkey_listener:
             self.hotkey_listener.stop()
+        if hasattr(self, "socket_server") and self.socket_server:
+            self.socket_server.stop()
+        if hasattr(self, "http_server") and self.http_server:
+            self.http_server.stop()
         if self.play_popup and self.play_popup.winfo_exists():
             self.play_popup.destroy()
         self.root.destroy()
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Select Reader: Speak highlighted text on Linux.")
+    parser.add_argument("--read", "-r", action="store_true", help="Read the current primary/clipboard selection immediately")
+    parser.add_argument("--text", "-t", type=str, help="Read the provided text")
+    parser.add_argument("--stop", "-s", action="store_true", help="Stop speaking")
+    args = parser.parse_args()
+
+    if args.stop:
+        if send_socket_command("stop"):
+            print("Stopped reading in running instance.")
+        else:
+            print("No instance running.")
+        return
+
+    if args.text:
+        if send_socket_command("text", args.text):
+            print("Sent text to running instance.")
+        else:
+            root = tk.Tk()
+            app = SelectReaderApp(root, initial_text=args.text)
+            root.protocol("WM_DELETE_WINDOW", app._quit)
+            root.mainloop()
+        return
+
+    if args.read:
+        text = get_selection_cli()
+        if not text:
+            print("No text selected.")
+            return
+        if send_socket_command("text", text):
+            print("Sent selection text to running instance.")
+        else:
+            root = tk.Tk()
+            app = SelectReaderApp(root, initial_text=text)
+            root.protocol("WM_DELETE_WINDOW", app._quit)
+            root.mainloop()
+        return
+
     root = tk.Tk()
     app = SelectReaderApp(root)
     root.protocol("WM_DELETE_WINDOW", app._quit)
