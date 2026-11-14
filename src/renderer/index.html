@@ -19,9 +19,12 @@
           <p>Select text anywhere and hear it read aloud.</p>
         </div>
       </div>
-      <div id="engine" class="pill" data-state="loading">
-        <span class="dot"></span>
-        <span id="engine-text">Loading voice…</span>
+      <div class="top-right">
+        <div id="engine" class="pill" data-state="loading">
+          <span class="dot"></span>
+          <span id="engine-text">Loading voice…</span>
+        </div>
+        <button id="help" class="help-button" title="Help (F1)" aria-label="Help">?</button>
       </div>
     </header>
     <div id="download" class="download" hidden><div></div></div>
@@ -29,16 +32,36 @@
     <section class="card shortcut">
       <p class="hint">Select text in any app, then press</p>
       <div id="keys" class="keys"></div>
-      <button id="change-shortcut" class="link-button">Change shortcut</button>
+      <button id="change-shortcut" class="link-button" data-shortcut="shortcut">Change shortcut</button>
       <p id="shortcut-message" class="message"></p>
+      <div class="more-shortcuts">
+        <div class="mini-shortcut">
+          <span>Pause</span>
+          <span class="mini-keys" data-keys="pause_shortcut"></span>
+          <button class="link-button" data-shortcut="pause_shortcut"></button>
+        </div>
+        <div class="mini-shortcut">
+          <span>Stop</span>
+          <span class="mini-keys" data-keys="stop_shortcut"></span>
+          <button class="link-button" data-shortcut="stop_shortcut"></button>
+        </div>
+      </div>
+      <p id="wayland-hint" class="wayland-hint" hidden>
+        On Wayland, other apps don't pass these shortcuts on. Set them up in your system
+        settings instead (Ubuntu: Settings → Keyboard → Custom Shortcuts) with the command
+        <code>select-reader --read</code>, <code>--pause</code> or <code>--stop</code>.
+      </p>
     </section>
 
     <section class="card player">
       <div class="player-head">
         <span id="player-label">Ready</span>
-        <span id="paste-hint">Ctrl+V reads pasted text</span>
+        <span class="player-tools">
+          <span id="paste-hint">Ctrl+V reads pasted text</span>
+          <button id="save-audio" class="link-button" title="Save the text as a WAV audio file" hidden>Save audio</button>
+        </span>
       </div>
-      <div id="text" class="text" hidden></div>
+      <div id="text" class="text" title="Click a sentence to read from there" hidden></div>
       <div id="empty" class="empty">
         <strong>Nothing read yet</strong>
         <span>Select some text and press the shortcut,<br />or paste text here.</span>
@@ -48,9 +71,15 @@
         <button id="replay" class="round" title="Read again from the start" aria-label="Read again">
           <svg viewBox="0 0 24 24"><path d="M12 5V1.5L7 6l5 4.5V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z" /></svg>
         </button>
-        <button id="play" class="round big" title="Play" aria-label="Play or pause">
+        <button id="back" class="round" title="Previous sentence (←)" aria-label="Previous sentence">
+          <svg viewBox="0 0 24 24"><path d="M19 5.5v13L9 12zM5.5 5.5H8v13H5.5z" /></svg>
+        </button>
+        <button id="play" class="round big" title="Play (Space)" aria-label="Play or pause">
           <svg class="icon-play" viewBox="0 0 24 24"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.2-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z" /></svg>
           <svg class="icon-pause" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1.2" /><rect x="14" y="5" width="4" height="14" rx="1.2" /></svg>
+        </button>
+        <button id="forward" class="round" title="Next sentence (→)" aria-label="Next sentence">
+          <svg viewBox="0 0 24 24"><path d="M5 5.5v13L15 12zM16 5.5h2.5v13H16z" /></svg>
         </button>
         <button id="stop" class="round" title="Stop" aria-label="Stop">
           <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2.5" /></svg>
@@ -65,10 +94,24 @@
       <label for="speed">Speed</label>
       <input id="speed" type="range" min="0.5" max="2" step="0.05" />
       <output id="speed-value" for="speed"></output>
+      <label for="volume">Volume</label>
+      <input id="volume" type="range" min="0" max="1" step="0.05" />
+      <output id="volume-value" for="volume"></output>
     </section>
+
+    <details id="recent" class="card" hidden>
+      <summary>Recent</summary>
+      <div id="recent-list" class="recent-list"></div>
+      <button id="clear-recent" class="link-button">Clear</button>
+    </details>
 
     <details class="card advanced">
       <summary>Advanced</summary>
+      <label class="switch">
+        <input id="start-on-login" type="checkbox" />
+        <span class="track"></span>
+        <span>Start Select Reader when I log in</span>
+      </label>
       <label class="switch">
         <input type="checkbox" data-setting="stream_chunks" />
         <span class="track"></span>
@@ -83,11 +126,92 @@
           at a time
         </label>
       </fieldset>
+      <div class="pronunciations">
+        <strong>Say words differently</strong>
+        <p>For names and abbreviations the voice gets wrong. Leave "say" empty to skip a word.</p>
+        <div id="pronunciation-list"></div>
+        <button id="add-pronunciation" class="link-button">Add a word</button>
+      </div>
     </details>
 
     <footer>
       <span id="status"></span>
       <button id="quit" class="link-button">Quit</button>
     </footer>
+
+    <!-- Help: opened with the "?" button or F1. Keys in [data-help-keys] and
+         [data-help-setting] are filled in by app.ts, so they match this computer
+         and the shortcuts the user picked. -->
+    <dialog id="help-dialog" class="help" aria-labelledby="help-title">
+      <div class="help-head">
+        <h2 id="help-title">How to use Select Reader</h2>
+        <button id="close-help" class="icon-button" title="Close (Esc)" aria-label="Close">×</button>
+      </div>
+      <div id="help-body" class="help-body" tabindex="-1">
+        <h3>Reading</h3>
+        <ol>
+          <li>Select text in any app.</li>
+          <li>Press <span class="mini-keys" data-help-setting="shortcut"></span>. Press it again on the same text to stop.</li>
+          <li>Or paste text into this window with <span class="mini-keys" data-help-keys="Mod+V"></span>.</li>
+        </ol>
+        <p>
+          Closing the window keeps Select Reader running in the tray, so the shortcut keeps
+          working. To stop it, use Quit (here or in the tray menu).
+        </p>
+        <p id="help-wayland" hidden>
+          On Wayland, other apps don't pass shortcuts on. Set them up in your system settings
+          (Ubuntu: Settings → Keyboard → Custom Shortcuts) with the commands
+          <code>select-reader --read</code>, <code>--pause</code> and <code>--stop</code>.
+        </p>
+
+        <h3>Shortcuts that work in every app</h3>
+        <table>
+          <tr><td>Read the selected text</td><td><span class="mini-keys" data-help-setting="shortcut"></span></td></tr>
+          <tr><td>Pause or resume</td><td><span class="mini-keys" data-help-setting="pause_shortcut"></span></td></tr>
+          <tr><td>Stop</td><td><span class="mini-keys" data-help-setting="stop_shortcut"></span></td></tr>
+        </table>
+        <p>Change them in the box at the top of the window.</p>
+
+        <h3>Shortcuts in this window</h3>
+        <table>
+          <tr><td>Play or pause</td><td><span class="mini-keys" data-help-keys="Space"></span></td></tr>
+          <tr><td>Previous / next sentence</td><td><span class="mini-keys" data-help-keys="←"></span> <span class="mini-keys" data-help-keys="→"></span></td></tr>
+          <tr><td>Read from a sentence</td><td>Click it</td></tr>
+          <tr><td>Read pasted text</td><td><span class="mini-keys" data-help-keys="Mod+V"></span></td></tr>
+          <tr><td>This help</td><td><span class="mini-keys" data-help-keys="F1"></span> or the <strong>?</strong> button; <span class="mini-keys" data-help-keys="Esc"></span> closes it</td></tr>
+        </table>
+
+        <h3>Features</h3>
+        <dl>
+          <dt>Voice, speed and volume</dt>
+          <dd>Pick a voice and press Preview to hear it. Volume changes right away, even mid-sentence.</dd>
+          <dt>Save audio</dt>
+          <dd>Top right of the player. Saves the text as a WAV file.</dd>
+          <dt>Recent</dt>
+          <dd>The last 10 texts; click one to read it again (also in the tray menu). Forgotten when you quit.</dd>
+          <dt>Start when I log in</dt>
+          <dd>Under Advanced. Select Reader then waits in the tray, without opening this window.</dd>
+          <dt>Say words differently</dt>
+          <dd>
+            Under Advanced. For names and abbreviations the voice gets wrong, e.g. "kubectl" →
+            "cube control". Leave "say" empty to skip a word, like "[1]".
+          </dd>
+          <dt>Start speaking before the whole text is ready</dt>
+          <dd>Under Advanced. Speech starts after the first sentence; the rest is made while it plays.</dd>
+        </dl>
+
+        <h3>From other programs</h3>
+        <p>Command line (if Select Reader is running, the command goes to it):</p>
+        <pre><code>select-reader --read          read the selection
+select-reader --text "Hello"  read some text
+select-reader --pause         pause or resume
+select-reader --stop          stop
+select-reader --hidden        start in the tray</code></pre>
+        <p>Local web address, for scripts and browser extensions:</p>
+        <pre><code>http://127.0.0.1:4040/read?text=Hello
+http://127.0.0.1:4040/pause
+http://127.0.0.1:4040/stop</code></pre>
+      </div>
+    </dialog>
   </body>
 </html>

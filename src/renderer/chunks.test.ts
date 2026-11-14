@@ -45,3 +45,14 @@ test("very long sentences are cut at spaces", () => {
 test("empty text gives no chunks", () => {
   assert.deepEqual(splitIntoChunks("   ", 1, 3), []);
 });
+
+test("can start from the sentence a position is in", () => {
+  const text = "One. Two three. Four.";
+  const fromTwo = splitIntoChunks(text, 1, 3, text.indexOf("three"));
+  assert.deepEqual(
+    fromTwo.map((c) => c.text),
+    ["Two three.", "Four."],
+  );
+  assert.equal(fromTwo[0].start, text.indexOf("Two"));
+  assert.deepEqual(splitIntoChunks(text, 1, 3, text.length), []);
+});

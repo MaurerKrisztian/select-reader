@@ -18,13 +18,27 @@ Works on **Linux** and **Windows**. macOS should work too but hasn't been tested
 
 In the window you can:
 
-- **Change the shortcut**: click *Change shortcut* and press the new keys.
+- **Get help**: the **?** button (top right) or F1 shows how to use the app, every
+  shortcut (including the ones you set) and what each feature does.
+- **Change the shortcut**: click *Change shortcut* and press the new keys. You can also
+  set shortcuts that pause and stop reading in any app.
 - Pause, stop or replay what's being read. The current sentence is highlighted.
-- Pick a voice and a speed. Picking a voice plays a short preview.
+- Skip to the next or previous sentence (the arrow keys work too), or click a sentence
+  to read from there. Space plays and pauses.
+- **Save audio**: save the text as a WAV file.
+- Pick a voice, a speed and a volume. Picking a voice plays a short preview.
 - Paste text into the window (Ctrl+V) to read it.
+- Read something again from *Recent* (also in the tray menu). The list is kept until
+  you quit and is never saved to disk.
+- Under *Advanced*: start Select Reader when you log in, and fix words the voice says
+  wrong (for example, say "kubectl" as "cube control", or leave the "say" field empty
+  to skip citation marks like "[1]").
 
 Closing the window keeps the app running in the tray, so the shortcut keeps working.
 Use **Quit** (in the window or the tray menu) to stop it.
+
+Text copied from PDFs is tidied up: words split over two lines with a hyphen are put
+back together. Up to 100,000 characters are read at once.
 
 > The shortcut is taken over while the app runs. `Ctrl+Shift+C` is also "copy" in most
 > terminals and "inspect" in browsers, so pick a different shortcut if you need those.
@@ -44,13 +58,19 @@ that was on your clipboard is put back.
 
 ### Linux on Wayland
 
-Wayland desktops may block apps from reading other apps' selection or grabbing global
-shortcuts. If the shortcut doesn't work, add a desktop keyboard shortcut instead
-(Ubuntu: *Settings → Keyboard → Custom Shortcuts*) with the command:
+Wayland only lets the app you're typing in read your selection, and doesn't pass global
+shortcuts on to other apps. So on Wayland:
 
-```sh
-select-reader --read
-```
+- Select Reader runs through XWayland (X11), which the desktop shares the selection with.
+  It restarts itself that way when started; there's nothing to set up.
+- Add the shortcuts in your desktop's settings instead (Ubuntu: *Settings → Keyboard →
+  Custom Shortcuts*), with these commands:
+
+  ```sh
+  select-reader --read    # read the selection
+  select-reader --pause   # pause / resume
+  select-reader --stop    # stop
+  ```
 
 ## Command line
 
@@ -59,18 +79,26 @@ select-reader --read          # read the selected text
 select-reader --text "Hello"  # read some text
 select-reader --pause         # pause / resume
 select-reader --stop          # stop
+select-reader --hidden        # start in the tray, without the window
 ```
 
 If the app is already running, the command is passed to it. Otherwise it starts.
 
 ## Local HTTP API
 
-For browser extensions and scripts, the app listens on `127.0.0.1:4040`:
+For scripts and browser extensions, the app listens on `127.0.0.1:4040`:
 
 ```sh
 curl "http://127.0.0.1:4040/read?text=Hello"
+curl --data-binary @article.txt "http://127.0.0.1:4040/read"   # long text: send it as the body
+curl "http://127.0.0.1:4040/pause"                              # pause / resume
 curl "http://127.0.0.1:4040/stop"
 ```
+
+Web pages can't use it, so a site you visit can't make your computer talk: requests
+that browsers mark as coming from a page (the `Sec-Fetch-Site` and `Origin` headers)
+are refused. Browser extensions can, from their background script, with permission
+for `http://127.0.0.1:4040/*`.
 
 ## Install
 
@@ -157,20 +185,23 @@ while the previous one plays.
 
 | File | What it does |
 | --- | --- |
-| `src/main/main.ts` | Starts the app: window, tray, shortcut, single instance, messages from the window |
+| `src/main/main.ts` | Starts the app: window, tray, shortcuts, single instance, messages from the window |
 | `src/main/selection.ts` | Gets the text the user selected |
+| `src/main/text.ts` | Tidies text before it's read (PDF hyphens, length cap) |
 | `src/main/speech.ts` | Starts the speech worker and sends it text |
 | `src/main/settings.ts` | Loads and saves `config.json` |
+| `src/main/autostart.ts` | Starting at login |
 | `src/main/tray.ts` | Tray icon and menu |
-| `src/main/cli.ts` | `--read`, `--text`, `--pause`, `--stop` |
+| `src/main/wav.ts` | Writes WAV files for *Save audio* |
+| `src/main/cli.ts` | `--read`, `--text`, `--pause`, `--stop`, `--hidden` |
 | `src/main/http-server.ts` | The local HTTP API |
 | `src/worker/kokoro-worker.ts` | Turns text into audio with Kokoro |
 | `src/preload/preload.cts` | The bridge between the window and the main process |
 | `src/renderer/app.ts` | The window's UI |
-| `src/renderer/reader.ts` | Plays text chunk by chunk, with pause and stop |
+| `src/renderer/reader.ts` | Plays text chunk by chunk, with pause, stop, skip and volume |
 | `src/renderer/chunks.ts` | Splits text into sentences and chunks |
 | `src/renderer/keys.ts` | Turns key presses into a shortcut like `Ctrl+Shift+C` |
-| `src/shared/` | Types and the voice list, used by all of the above |
+| `src/shared/` | Types, the voice list and the word replacements, used by all of the above |
 | `electron-builder.yml` | Installer settings |
 | `.github/workflows/build.yml` | Builds the installers on GitHub and publishes releases |
 | `site/` | The website, published by `.github/workflows/pages.yml` |
@@ -181,3 +212,4 @@ Where things are stored:
 | --- | --- | --- |
 | Settings | `~/.config/select-reader/config.json` | `%APPDATA%\select-reader\config.json` |
 | Voice model | `~/.cache/select-reader/models` | `%LOCALAPPDATA%\select-reader\models` |
+| Start at login | `~/.config/autostart/select-reader.desktop` | Windows' startup apps list |

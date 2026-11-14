@@ -2,8 +2,7 @@ import { clipboard } from "electron";
 import { execFile } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-
-const MAX_CHARS = 5000;
+import { cleanText } from "./text.js";
 
 export interface SelectedText {
   text: string;
@@ -76,17 +75,6 @@ async function waitForClipboardText(ms: number): Promise<string> {
     await sleep(50);
   }
   return "";
-}
-
-/** Trims every line and caps very long text. */
-export function cleanText(text: string): string {
-  const cleaned = text
-    .replaceAll("\0", " ")
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .join("\n")
-    .trim();
-  return cleaned.length > MAX_CHARS ? `${cleaned.slice(0, MAX_CHARS).trimEnd()}...` : cleaned;
 }
 
 function commandExists(name: string): boolean {

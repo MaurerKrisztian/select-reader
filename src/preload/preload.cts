@@ -11,11 +11,16 @@ function listen(channel: string, callback: (...args: any[]) => void): void {
 const api: SelectReaderApi = {
   getAppInfo: () => ipcRenderer.invoke("app-info"),
   updateSettings: (changes) => ipcRenderer.invoke("update-settings", changes),
-  setShortcut: (shortcut) => ipcRenderer.invoke("set-shortcut", shortcut),
+  setShortcut: (setting, shortcut) => ipcRenderer.invoke("set-shortcut", setting, shortcut),
   pauseShortcut: (paused) => ipcRenderer.send("pause-shortcut", paused),
+  setStartOnLogin: (enabled) => ipcRenderer.invoke("set-start-on-login", enabled),
   synthesize: (text, voice, speed) => ipcRenderer.invoke("synthesize", text, voice, speed),
   cancelSpeech: () => ipcRenderer.send("cancel-speech"),
+  beginAudioFile: (text) => ipcRenderer.invoke("begin-audio-file", text),
+  writeAudio: (samples) => ipcRenderer.invoke("write-audio", samples),
+  endAudioFile: (keep) => ipcRenderer.invoke("end-audio-file", keep),
   readText: (text) => ipcRenderer.send("read-text", text),
+  clearHistory: () => ipcRenderer.send("clear-history"),
   reportState: (state) => ipcRenderer.send("reader-state", state),
   windowReady: () => ipcRenderer.send("window-ready"),
   quit: () => ipcRenderer.send("quit"),
@@ -25,6 +30,7 @@ const api: SelectReaderApi = {
   onTogglePause: (callback) => listen("toggle-pause", callback),
   onEngineStatus: (callback) => listen("engine-status", callback),
   onNotice: (callback) => listen("notice", callback),
+  onHistory: (callback) => listen("history", callback),
 };
 
 contextBridge.exposeInMainWorld("selectReader", api);

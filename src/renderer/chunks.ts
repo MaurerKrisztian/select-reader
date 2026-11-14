@@ -11,9 +11,10 @@ const MAX_SENTENCE_LENGTH = 300;
 /**
  * Splits text into chunks of whole sentences: a small first chunk so speech starts
  * quickly, then bigger ones that are generated while the previous one plays.
+ * Starts with the sentence that character `from` is in.
  */
-export function splitIntoChunks(text: string, firstSize: number, nextSize: number): Chunk[] {
-  const sentences = splitIntoSentences(text);
+export function splitIntoChunks(text: string, firstSize: number, nextSize: number, from = 0): Chunk[] {
+  const sentences = splitIntoSentences(text).filter((sentence) => sentence.end > from);
   const chunks: Chunk[] = [];
   let size = firstSize;
   for (let i = 0; i < sentences.length; i += size, size = nextSize) {

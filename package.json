@@ -1,7 +1,7 @@
 {
   "name": "select-reader",
   "productName": "Select Reader",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Reads selected text aloud with local Kokoro voices.",
   "private": true,
   "type": "module",
