@@ -1,0 +1,30 @@
+{
+  "name": "select-reader",
+  "productName": "Select Reader",
+  "version": "0.1.0",
+  "description": "Reads selected text aloud with local Kokoro voices.",
+  "private": true,
+  "type": "module",
+  "main": "dist/main/main.js",
+  "homepage": "https://github.com/MaurerKrisztian/select-reader",
+  "desktopName": "select-reader.desktop",
+  "scripts": {
+    "clean": "node -e \"fs.rmSync('dist', { recursive: true, force: true })\"",
+    "build": "npm run clean && tsc && node scripts/copy-assets.js",
+    "start": "npm run build && electron .",
+    "test": "npm run build && node --test \"dist/**/*.test.js\"",
+    "dist:linux": "npm run build && electron-builder --linux --publish never",
+    "dist:win": "npm run build && electron-builder --win --publish never",
+    "dist:mac": "npm run build && electron-builder --mac --publish never"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^3.8.1",
+    "kokoro-js": "^1.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "electron": "^45.3.2",
+    "electron-builder": "^26.18.0",
+    "typescript": "^7.0.2"
+  }
+}

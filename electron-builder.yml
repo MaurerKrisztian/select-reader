@@ -1,0 +1,73 @@
+# Builds the installers:
+#   npm run dist:linux   -> release/*.AppImage and release/*.deb
+#   npm run dist:win     -> release/*.exe (installer)
+#   npm run dist:mac     -> release/*.dmg
+#
+# Build each platform on that platform (or in CI): npm only installs the native parts
+# of the speech engine for the system it runs on.
+
+appId: com.selectreader.app
+productName: Select Reader
+directories:
+  output: release
+
+files:
+  - dist/**/*
+  - "!dist/**/*.test.js"
+  - assets/icon.png
+  - package.json
+  # Only the CPU speech engine is used. Skip ~350 MB of GPU (CUDA/TensorRT) libraries
+  # and the files that are only for running in a web browser.
+  - "!node_modules/onnxruntime-node/bin/napi-v3/linux/x64/libonnxruntime_providers_{cuda,tensorrt}.so"
+  - "!node_modules/onnxruntime-web/**"
+  - "!node_modules/@huggingface/transformers/dist/*.{map,wasm}"
+
+# Native libraries can't be loaded from inside the app archive.
+asarUnpack:
+  - node_modules/onnxruntime-node/bin/**
+  - node_modules/sharp/**
+  - node_modules/@img/**
+
+# The native parts are prebuilt; there is nothing to compile.
+npmRebuild: false
+
+# File names without the version, so the website can always link to the newest one:
+# https://github.com/MaurerKrisztian/select-reader/releases/latest/download/<file name>
+appImage:
+  artifactName: select-reader-x86_64.AppImage
+nsis:
+  artifactName: select-reader-setup.exe
+dmg:
+  artifactName: select-reader-${arch}.dmg
+
+linux:
+  target: [AppImage, deb]
+  executableName: select-reader
+  category: Utility
+  icon: assets/icon.png
+  synopsis: Reads selected text aloud
+  maintainer: MaurerKrisztian
+  # Lets the dock/taskbar match the running window to the app's icon.
+  syncDesktopName: true
+  files:
+    - "!node_modules/onnxruntime-node/bin/napi-v3/{win32,darwin}/**"
+
+deb:
+  artifactName: select-reader_amd64.deb
+  # Lets Select Reader press "copy" in other apps. apt installs recommended packages.
+  recommends: [xdotool]
+
+win:
+  target: [nsis]
+  icon: assets/icon.png
+  files:
+    - "!node_modules/onnxruntime-node/bin/napi-v3/{linux,darwin}/**"
+
+mac:
+  target: [dmg]
+  category: public.app-category.utilities
+  icon: assets/icon.png
+  files:
+    - "!node_modules/onnxruntime-node/bin/napi-v3/{linux,win32}/**"
+  extendInfo:
+    NSAppleEventsUsageDescription: Select Reader presses Cmd+C to copy the text you selected.

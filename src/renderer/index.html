@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self'; style-src 'self'; script-src 'self'"
+    />
+    <title>Select Reader</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script type="module" src="app.js"></script>
+  </head>
+  <body data-reader="idle">
+    <header class="top">
+      <div class="brand">
+        <img src="../../assets/icon.png" alt="" />
+        <div>
+          <h1>Select Reader</h1>
+          <p>Select text anywhere and hear it read aloud.</p>
+        </div>
+      </div>
+      <div id="engine" class="pill" data-state="loading">
+        <span class="dot"></span>
+        <span id="engine-text">Loading voice…</span>
+      </div>
+    </header>
+    <div id="download" class="download" hidden><div></div></div>
+
+    <section class="card shortcut">
+      <p class="hint">Select text in any app, then press</p>
+      <div id="keys" class="keys"></div>
+      <button id="change-shortcut" class="link-button">Change shortcut</button>
+      <p id="shortcut-message" class="message"></p>
+    </section>
+
+    <section class="card player">
+      <div class="player-head">
+        <span id="player-label">Ready</span>
+        <span id="paste-hint">Ctrl+V reads pasted text</span>
+      </div>
+      <div id="text" class="text" hidden></div>
+      <div id="empty" class="empty">
+        <strong>Nothing read yet</strong>
+        <span>Select some text and press the shortcut,<br />or paste text here.</span>
+      </div>
+      <div class="progress"><div id="progress"></div></div>
+      <div class="controls">
+        <button id="replay" class="round" title="Read again from the start" aria-label="Read again">
+          <svg viewBox="0 0 24 24"><path d="M12 5V1.5L7 6l5 4.5V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z" /></svg>
+        </button>
+        <button id="play" class="round big" title="Play" aria-label="Play or pause">
+          <svg class="icon-play" viewBox="0 0 24 24"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.2-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z" /></svg>
+          <svg class="icon-pause" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1.2" /><rect x="14" y="5" width="4" height="14" rx="1.2" /></svg>
+        </button>
+        <button id="stop" class="round" title="Stop" aria-label="Stop">
+          <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2.5" /></svg>
+        </button>
+      </div>
+    </section>
+
+    <section class="card voice">
+      <label for="voice">Voice</label>
+      <div class="select"><select id="voice"></select></div>
+      <button id="preview-voice" class="button">Preview</button>
+      <label for="speed">Speed</label>
+      <input id="speed" type="range" min="0.5" max="2" step="0.05" />
+      <output id="speed-value" for="speed"></output>
+    </section>
+
+    <details class="card advanced">
+      <summary>Advanced</summary>
+      <label class="switch">
+        <input type="checkbox" data-setting="stream_chunks" />
+        <span class="track"></span>
+        <span>Start speaking before the whole text is ready</span>
+      </label>
+      <fieldset id="chunk-sizes">
+        <label>
+          First part
+          <input type="number" min="1" max="4" data-setting="first_chunk_sentences" />
+          sentences, then
+          <input type="number" min="1" max="8" data-setting="next_chunk_sentences" />
+          at a time
+        </label>
+      </fieldset>
+    </details>
+
+    <footer>
+      <span id="status"></span>
+      <button id="quit" class="link-button">Quit</button>
+    </footer>
+  </body>
+</html>

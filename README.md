@@ -1,185 +1,183 @@
 # Select Reader
 
-![Select Reader app screenshot](assets/select-reader-screenshot.png)
+![Select Reader reading a highlighted paragraph](site/screenshot.png)
 
-Select Reader is a small Linux accessibility app that reads highlighted text
-aloud. Start it, select text in a browser or another app, and it speaks the
-current selection. A small play button appears near your cursor when new text is
-selected. Turn off **Auto-read** if you only want it to speak when you press the
-button.
+Select text in any app, press a shortcut, and hear it read aloud with natural-sounding
+[Kokoro](https://huggingface.co/hexgrad/Kokoro-82M) voices. Everything runs on your
+computer: no account, and no internet after the first start.
 
-Whisper is for speech-to-text, so it cannot read text aloud. Select Reader uses
-offline text-to-speech instead, preferring Kokoro local AI voices when installed.
+Works on **Linux** and **Windows**. macOS should work too but hasn't been tested.
 
-## Quick Start
+**Website and downloads: https://maurerkrisztian.github.io/select-reader/**
 
-Get started with Select Reader in 3 simple steps:
+## Using it
 
-### 1. Install Dependencies & App
-Run the following commands in your terminal to install system requirements and set up the app:
+1. Start **Select Reader**. The first start downloads the voice model (about 310 MB, once).
+2. Select text in any app.
+3. Press the shortcut (**Ctrl+Shift+C** by default). Press it again to stop.
 
-```sh
-# Install tkinter and fallback TTS
-sudo apt install python3-tk speech-dispatcher
+In the window you can:
 
-# Install Select Reader
-chmod +x install.sh
-./install.sh
-```
+- **Change the shortcut**: click *Change shortcut* and press the new keys.
+- Pause, stop or replay what's being read. The current sentence is highlighted.
+- Pick a voice and a speed. Picking a voice plays a short preview.
+- Paste text into the window (Ctrl+V) to read it.
 
-### 2. Configure Your Shortcut
-Add a global keyboard shortcut to read text instantly from *any* application (PDF readers, browsers, text editors):
-1. Open Ubuntu **Settings** -> **Keyboard** -> **View and Customize Shortcuts** -> **Custom Shortcuts** (at the bottom).
-2. Click the **`+`** (Add Shortcut) button and enter:
-   - **Name**: `Read Selection`
-   - **Command**: `select-reader --read`
-   - **Shortcut**: Press the keys you want to use (e.g., `Super+S` or `Ctrl+Alt+S`).
+Closing the window keeps the app running in the tray, so the shortcut keeps working.
+Use **Quit** (in the window or the tray menu) to stop it.
 
-### 3. Start Reading!
-- Open **Select Reader** from your app launcher or run `select-reader`.
-- Highlight any text on your screen and press your global shortcut (or the default app shortcut `Ctrl+Shift+C`). 
-- The app will restore, focus, and read the selected text aloud immediately.
+> The shortcut is taken over while the app runs. `Ctrl+Shift+C` is also "copy" in most
+> terminals and "inspect" in browsers, so pick a different shortcut if you need those.
 
-## Features
+### How it gets the selected text
 
-- Reads highlighted text aloud on Linux desktops.
-- Shows a small play button near the cursor for new selections.
-- Supports auto-read, manual playback, pause/resume, clipboard watching, and a read shortcut.
-- Uses Kokoro local AI voices when available, with offline speech fallbacks.
-- Splits long selections into chunks for faster playback.
+Select Reader presses "copy" in the app you're using and reads what it copied, so
+the selected text ends up on your clipboard too. If nothing gets copied, the text
+that was on your clipboard is put back.
 
-## Requirements
+- **Linux:** presses Ctrl+Insert (copy, but it can't interrupt a program in a terminal)
+  using `xdotool`. The `.deb` installs it; otherwise run `sudo apt install xdotool`.
+  If nothing gets copied, it reads the highlighted text directly (the "primary
+  selection"), which is how terminals work.
+- **Windows / macOS:** presses Ctrl+C (Cmd+C).
+  On macOS, allow Select Reader under *System Settings → Privacy & Security → Accessibility*.
 
-- Python 3 with Tkinter
-- Kokoro for local AI voices, or one fallback speech command:
-  - `spd-say` from `speech-dispatcher`
-  - `espeak-ng`
-  - `espeak`
+### Linux on Wayland
 
-On Debian or Ubuntu:
+Wayland desktops may block apps from reading other apps' selection or grabbing global
+shortcuts. If the shortcut doesn't work, add a desktop keyboard shortcut instead
+(Ubuntu: *Settings → Keyboard → Custom Shortcuts*) with the command:
 
 ```sh
-sudo apt install python3-tk speech-dispatcher
-```
-
-or:
-
-```sh
-sudo apt install python3-tk espeak-ng
-```
-
-For Kokoro local AI voices:
-
-```sh
-python3 -m pip install --user kokoro soundfile
-sudo apt install espeak-ng
-```
-
-The **Kokoro voice** selector in the app lets you choose voices such as
-`af_heart`, `af_bella`, `am_adam`, and `bf_emma`. You can set the default voice
-when launching:
-
-```sh
-SELECT_READER_KOKORO_VOICE=af_bella python3 select-reader.py
-```
-
-## Keyboard Shortcuts
-
-The default shortcut is `Ctrl+Shift+C` to read the current selection.
-
-This works whenever the Select Reader window is focused. For a global shortcut
-on X11, install the optional hotkey dependency:
-
-```sh
-python3 -m pip install --user pynput
-```
-
-Change the shortcut in the **Read shortcut** field inside the app. Shortcuts use
-one key plus optional modifiers such as `Ctrl`, `Alt`, `Shift`, or `Super`.
-Examples:
-
-- `Ctrl+Shift+C`
-- `Ctrl+Shift+Space`
-- `Alt+F8`
-
-Settings are saved in `~/.config/select-reader/config.json`.
-
-## Chunked TTS
-
-For long selections, enable **Generate next chunks while reading**. The first
-chunk starts quickly with a small number of sentences, then later chunks are
-generated while the current audio is playing.
-
-- **First**: sentences in the first fast-start chunk
-- **Next**: sentences in each following chunk
-
-Optional helpers for selection access on some desktops:
-
-```sh
-sudo apt install wl-clipboard xclip xsel
-```
-
-## Run
-
-```sh
-python3 select-reader.py
-```
-
-## Install For Your User
-
-```sh
-chmod +x install.sh
-./install.sh
-```
-
-After installing, open **Select Reader** from your app launcher or run:
-
-```sh
-select-reader
-```
-
-## Notes About Wayland
-
-On X11, Linux exposes highlighted text through the primary selection, so the app
-can read text just by selecting it.
-
-On Wayland, many desktops intentionally prevent apps from reading highlighted
-text from other apps. If selection reading does not work, enable **Watch
-clipboard** in Select Reader, then copy selected text with `Ctrl+C` to read it.
-Alternatively, map a system-wide custom shortcut (explained below) to trigger reading.
-
-## Command Line Interface (CLI)
-
-Select Reader runs a single-instance listener. Running CLI commands will communicate with the already-running application instance and automatically restore and focus the GUI window:
-
-```sh
-# Read the current highlighted text or clipboard selection immediately
 select-reader --read
-
-# Read specific text
-select-reader --text "Hello world"
-
-# Stop speech playback
-select-reader --stop
 ```
 
-## System-Wide Keyboard Shortcuts (Universal / Wayland)
+## Command line
 
-On Wayland (or if you prefer a global hotkey without Python dependencies), you can bind a system shortcut to read highlighted text inside any application:
+```sh
+select-reader --read          # read the selected text
+select-reader --text "Hello"  # read some text
+select-reader --pause         # pause / resume
+select-reader --stop          # stop
+```
 
-1. Open your desktop's keyboard settings (e.g., Ubuntu **Settings** -> **Keyboard** -> **Custom Shortcuts**).
-2. Create a new custom shortcut:
-   - **Name**: `Read Selection with Select Reader`
-   - **Command**: `select-reader --read`
-   - **Shortcut**: E.g., `Super+S` (Windows/Super Key + S)
-3. Select any text, press the shortcut, and the reader will automatically pop up, focus, and read it.
+If the app is already running, the command is passed to it. Otherwise it starts.
 
-## Browser Right-Click Menu Integration
+## Local HTTP API
 
-Select Reader runs a local HTTP server listening on `127.0.0.1:4040` to trigger reading from browser context menus:
+For browser extensions and scripts, the app listens on `127.0.0.1:4040`:
 
-1. Install a browser extension that supports adding custom context menu search URLs, such as **Selection Search** (available for Chrome/Brave/Edge and Firefox).
-2. Add a custom engine in the extension's settings:
-   - **Name**: `Select Reader`
-   - **URL**: `http://localhost:4040/read?text=%s`
-3. Now, highlight any text, right-click, and choose **Select Reader** to speak it!
+```sh
+curl "http://127.0.0.1:4040/read?text=Hello"
+curl "http://127.0.0.1:4040/stop"
+```
+
+## Install
+
+Download the installer for your system from the
+[releases page](https://github.com/MaurerKrisztian/select-reader/releases), or build it
+yourself (see *Development*), then:
+
+- **Ubuntu / Debian:** `sudo apt install ./select-reader_amd64.deb`
+- **Other Linux:** run `select-reader-x86_64.AppImage`
+- **Windows:** run `select-reader-setup.exe`. The installer isn't signed, so
+  Windows may warn about it: click *More info → Run anyway*.
+
+### Upgrading from the Python version
+
+If you installed the old Python version with `install.sh`, its launcher and menu entry
+win over the new ones. Remove them:
+
+```sh
+rm ~/.local/bin/select-reader ~/.local/share/applications/select-reader.desktop
+rm -r ~/.local/share/select-reader
+```
+
+Your settings carry over (`~/.config/select-reader/config.json`).
+
+## Development
+
+Needs Node.js 22 or newer.
+
+```sh
+npm install
+npm start           # build and run
+npm test            # unit tests
+npm run dist:linux  # release/*.AppImage and *.deb
+npm run dist:win    # release/*.exe (build this on Windows)
+npm run dist:mac    # release/*.dmg (build this on a Mac)
+```
+
+Build each installer on its own system: npm only installs the speech engine's native
+files for the system it runs on.
+
+### Builds and releases
+
+GitHub Actions ([.github/workflows/build.yml](.github/workflows/build.yml)) builds the
+Linux and Windows installers on every push to `main` and every pull request. Download
+them from the workflow run's *Artifacts*.
+
+To publish a release, set the version in `package.json`, then push a matching tag:
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The workflow builds the installers and attaches them to a new GitHub release.
+
+### Website
+
+The website is the `site/` folder, published to GitHub Pages by
+[.github/workflows/pages.yml](.github/workflows/pages.yml) whenever it changes on `main`.
+One-time setup: on GitHub, open *Settings → Pages* and set *Source* to *GitHub Actions*.
+
+Its download buttons link to the newest release, so they work once a release exists.
+To preview it locally, serve the folder: `python3 -m http.server --directory site`.
+
+### How it fits together
+
+```
+ shortcut / CLI / HTTP / tray
+             │
+             ▼
+   main process (src/main)  ──── gets the selected text, decides what to read
+             │  "read this"
+             ▼
+   window (src/renderer)    ──── splits text into chunks, plays audio, highlights
+             │  "speak this chunk"            ▲ audio samples
+             ▼                                │
+   speech worker (src/worker) ── runs Kokoro in its own process
+```
+
+The first chunk is one sentence, so speech starts quickly. Each next chunk is generated
+while the previous one plays.
+
+### Files
+
+| File | What it does |
+| --- | --- |
+| `src/main/main.ts` | Starts the app: window, tray, shortcut, single instance, messages from the window |
+| `src/main/selection.ts` | Gets the text the user selected |
+| `src/main/speech.ts` | Starts the speech worker and sends it text |
+| `src/main/settings.ts` | Loads and saves `config.json` |
+| `src/main/tray.ts` | Tray icon and menu |
+| `src/main/cli.ts` | `--read`, `--text`, `--pause`, `--stop` |
+| `src/main/http-server.ts` | The local HTTP API |
+| `src/worker/kokoro-worker.ts` | Turns text into audio with Kokoro |
+| `src/preload/preload.cts` | The bridge between the window and the main process |
+| `src/renderer/app.ts` | The window's UI |
+| `src/renderer/reader.ts` | Plays text chunk by chunk, with pause and stop |
+| `src/renderer/chunks.ts` | Splits text into sentences and chunks |
+| `src/renderer/keys.ts` | Turns key presses into a shortcut like `Ctrl+Shift+C` |
+| `src/shared/` | Types and the voice list, used by all of the above |
+| `electron-builder.yml` | Installer settings |
+| `.github/workflows/build.yml` | Builds the installers on GitHub and publishes releases |
+| `site/` | The website, published by `.github/workflows/pages.yml` |
+
+Where things are stored:
+
+| | Linux | Windows |
+| --- | --- | --- |
+| Settings | `~/.config/select-reader/config.json` | `%APPDATA%\select-reader\config.json` |
+| Voice model | `~/.cache/select-reader/models` | `%LOCALAPPDATA%\select-reader\models` |

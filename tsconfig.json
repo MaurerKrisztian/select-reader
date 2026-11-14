@@ -1,0 +1,17 @@
+{
+  // One config for the whole app. Files compile from src/ to dist/ with the same layout.
+  // Everything is an ES module except the preload script (preload.cts), which Electron
+  // requires to be CommonJS.
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "strict": true,
+    "skipLibCheck": true,
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src"]
+}
